@@ -1,38 +1,25 @@
-FROM debian:bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-dev \
-    python3-pip \
-    python3.11-venv \
-    git \
-    curl \
-    ffmpeg \
-    build-essential \
-    libssl-dev \
-    libffi-dev \
+    git curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Make python3.11 the default
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
-    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-
-# Clone hermes-agent
+# Clone hermes-agent (shallow for speed)
 WORKDIR /opt/hermes
-RUN git clone https://github.com/NousResearch/hermes-agent.git .
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git .
 
-# Install Python dependencies (--break-system-packages needed on Debian bookworm)
-RUN pip install --no-cache-dir --break-system-packages -e ".[all]" || \
-    pip install --no-cache-dir --break-system-packages -e .
+# Install hermes + all optional deps via uv
+RUN uv pip install --system -e ".[all]"
 
-# Copy our entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Install our wrapper server deps
+COPY requirements.txt /app/requirements.txt
+RUN uv pip install --system -r /app/requirements.txt
 
-# Copy config template
-COPY config.yaml.template /opt/config.yaml.template
+COPY server.py /app/server.py
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
-ENV HERMES_HOME=/opt/data
+ENV HOME=/data
+ENV HERMES_HOME=/data/.hermes
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/start.sh"]
